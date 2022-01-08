@@ -1,0 +1,34 @@
+[package]
+name = "linfa-causal-inference"
+version = "0.5.0"
+authors = ["Jorge Perez Burgos <vaijira@gmail.com>"]
+description = "Causal inference utilities and methods"
+edition = "2018"
+license = "MIT/Apache-2.0"
+
+repository = "https://github.com/rust-ml/linfa"
+readme = "README.md"
+
+keywords = ["causal-inference", "do-calculus", "causal", "inference"]
+categories = ["algorithms", "mathematics", "science"]
+
+[features]
+default = []
+serde = ["serde_crate", "ndarray/serde", "sprs/serde"]
+
+[dependencies.serde_crate]
+package = "serde"
+optional = true
+version = "1.0"
+default-features = false
+features = ["std", "derive"]
+
+[dependencies]
+anyhow = "1.0.48"
+petgraph = "0.6"
+ndarray = "0.15"
+num-traits = "0.2"
+sprs = { version="0.11.0", default-features = false }
+
+linfa = { version = "0.5.0", path = "../.." }
+linfa-datasets = { version = "0.5.0", path = "../../datasets", features = ["diabetes"] }
