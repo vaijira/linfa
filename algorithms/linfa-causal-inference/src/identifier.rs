@@ -1,10 +1,36 @@
 use anyhow::{bail, Result};
 use petgraph::algo::toposort;
 use petgraph::stable_graph::NodeIndex;
+use std::marker::PhantomData;
 use std::{fmt::Debug, fmt::Display, hash::Hash};
 
 use crate::admg::ADMG;
 use crate::setutils::{setdiff, setintersect, setunion, OrderedSet};
+
+pub trait Identifier<T>
+where
+    T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
+{
+    fn identify(
+        &self,
+        graph: &ADMG<T>,
+        treatment: &OrderedSet<T>,
+        outcome: &OrderedSet<T>,
+    ) -> Result<Estimand<T>>;
+}
+
+trait ConditionalIdentifier<T>
+where
+    T: Display + Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord,
+{
+    fn idc(
+        &self,
+        graph: &ADMG<T>,
+        treatment: &OrderedSet<T>,
+        outcome: &OrderedSet<T>,
+        conditional: &OrderedSet<T>,
+    ) -> Result<Estimand<T>>;
+}
 
 #[derive(Clone)]
 enum EstimandProbabilities<T> {
@@ -16,6 +42,23 @@ enum EstimandProbabilities<T> {
 #[derive(Clone)]
 pub struct Estimand<T> {
     value: EstimandProbabilities<T>,
+}
+
+impl<T> Estimand<T> {
+    pub fn conditional_vars(&self) -> Vec<&T> {
+        let mut result = vec![];
+        match &self.value {
+            EstimandProbabilities::Basic(_, conditional_vars) => {
+                result = conditional_vars.iter().collect();
+            }
+            EstimandProbabilities::Compose(product, _) => {
+                for estimand in product {
+                    result.append(&mut estimand.conditional_vars());
+                }
+            }
+        }
+        result
+    }
 }
 
 impl<T> Display for Estimand<T>
@@ -77,9 +120,30 @@ where
     }
 }
 
-pub struct IDIdentifier {}
+pub struct IDIdentifier<T>
+where
+    T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
+{
+    _data: PhantomData<T>,
+}
 
-impl IDIdentifier {
+impl<T> Default for IDIdentifier<T>
+where
+    T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> IDIdentifier<T>
+where
+    T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
+{
+    pub fn new() -> Self {
+        IDIdentifier { _data: PhantomData }
+    }
+
     /*
       Implementation of the ID algorithm.
       Link - https://ftp.cs.ucla.edu/pub/stat_ser/shpitser-thesis.pdf
@@ -89,7 +153,7 @@ impl IDIdentifier {
       - In R: https://github.com/santikka/causaleffect/blob/master/R/id.R
       - In python: https://github.com/microsoft/dowhy/blob/master/dowhy/causal_identifiers/id_identifier.py
     */
-    fn id_internal<T>(
+    fn id_internal(
         &self,
         outcome: &OrderedSet<NodeIndex>,
         treatment: &OrderedSet<NodeIndex>,
@@ -257,11 +321,32 @@ impl IDIdentifier {
         bail!("This code should be unreachable, this should never happen");
     }
 
-    pub fn id<T>(
+    pub fn id_index(
         &self,
-        outcome: &OrderedSet<T>,
-        treatment: &OrderedSet<T>,
         graph: &ADMG<T>,
+        treatment: &OrderedSet<NodeIndex>,
+        outcome: &OrderedSet<NodeIndex>,
+    ) -> Result<Estimand<T>>
+    where
+        T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
+    {
+        let mut probability: Estimand<T> = Estimand {
+            value: EstimandProbabilities::Compose(vec![], vec![]),
+        };
+
+        self.id_internal(outcome, treatment, &mut probability, graph)
+    }
+}
+
+impl<T> Identifier<T> for IDIdentifier<T>
+where
+    T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
+{
+    fn identify(
+        &self,
+        graph: &ADMG<T>,
+        treatment: &OrderedSet<T>,
+        outcome: &OrderedSet<T>,
     ) -> Result<Estimand<T>>
     where
         T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
@@ -287,22 +372,6 @@ impl IDIdentifier {
             graph,
         )
     }
-
-    pub fn id_index<T>(
-        &self,
-        outcome: &OrderedSet<NodeIndex>,
-        treatment: &OrderedSet<NodeIndex>,
-        graph: &ADMG<T>,
-    ) -> Result<Estimand<T>>
-    where
-        T: Clone + PartialEq + Eq + Clone + Hash + PartialOrd + Ord + Debug,
-    {
-        let mut probability: Estimand<T> = Estimand {
-            value: EstimandProbabilities::Compose(vec![], vec![]),
-        };
-
-        self.id_internal(outcome, treatment, &mut probability, graph)
-    }
 }
 
 #[cfg(test)]
@@ -311,6 +380,7 @@ mod tests {
 
     #[test]
     fn test_direct_dag() {
+        // T → Y
         let mut causal_graph = ADMG::<&str>::new();
         let t = causal_graph.add_node("T");
         let y = causal_graph.add_node("Y");
@@ -318,8 +388,8 @@ mod tests {
         let t_set: OrderedSet<NodeIndex> = [t].iter().copied().collect();
         let y_set: OrderedSet<NodeIndex> = [y].iter().copied().collect();
 
-        let identifier = IDIdentifier {};
-        if let Ok(estimand) = identifier.id_index(&y_set, &t_set, &causal_graph) {
+        let identifier = IDIdentifier::new();
+        if let Ok(estimand) = identifier.id_index(&causal_graph, &t_set, &y_set) {
             assert_eq!(format!("{}", estimand), "P(Y|T)");
         } else {
             unreachable!();
@@ -328,6 +398,7 @@ mod tests {
 
     #[test]
     fn test_cycle_dag() {
+        // T ↔ Y
         let mut g = ADMG::<&str>::new();
         let t = g.add_node("T");
         let y = g.add_node("Y");
@@ -336,8 +407,8 @@ mod tests {
         let t_set: OrderedSet<NodeIndex> = [t].iter().copied().collect();
         let y_set: OrderedSet<NodeIndex> = [y].iter().copied().collect();
 
-        let identifier = IDIdentifier {};
-        if let Err(msg) = identifier.id_index(&y_set, &t_set, &g) {
+        let identifier = IDIdentifier::new();
+        if let Err(msg) = identifier.id_index(&g, &t_set, &y_set) {
             assert_eq!(format!("{}", msg), "Detected cycle in topological ordering");
         } else {
             unreachable!();
@@ -345,7 +416,8 @@ mod tests {
     }
 
     #[test]
-    fn test_mediator_dag() {
+    fn test_chain_dag() {
+        // T → M → Y
         let mut g = ADMG::<&str>::new();
         let t = g.add_node("T");
         let m = g.add_node("M");
@@ -355,8 +427,8 @@ mod tests {
         let t_set: OrderedSet<NodeIndex> = [t].iter().copied().collect();
         let y_set: OrderedSet<NodeIndex> = [y].iter().copied().collect();
 
-        let identifier = IDIdentifier {};
-        if let Ok(estimand) = identifier.id_index(&y_set, &t_set, &g) {
+        let identifier = IDIdentifier::new();
+        if let Ok(estimand) = identifier.id_index(&g, &t_set, &y_set) {
             assert_eq!(format!("{}", estimand), "∑{M}(P(M|T)P(Y|T,M))");
         } else {
             unreachable!();
@@ -374,8 +446,8 @@ mod tests {
         g.add_edge(x, y, ());
         let t_set: OrderedSet<NodeIndex> = [t].iter().copied().collect();
         let y_set: OrderedSet<NodeIndex> = [y].iter().copied().collect();
-        let identifier = IDIdentifier {};
-        if let Ok(estimand) = identifier.id_index(&y_set, &t_set, &g) {
+        let identifier = IDIdentifier::new();
+        if let Ok(estimand) = identifier.id_index(&g, &t_set, &y_set) {
             assert_eq!(format!("{}", estimand), "∑{X}(P(X|T)P(Y|T,X))");
         } else {
             unreachable!();
@@ -395,8 +467,8 @@ mod tests {
         g.add_edge(x2, t, ());
         let t_set: OrderedSet<NodeIndex> = [t].iter().copied().collect();
         let y_set: OrderedSet<NodeIndex> = [y].iter().copied().collect();
-        let identifier = IDIdentifier {};
-        if let Ok(estimand) = identifier.id_index(&y_set, &t_set, &g) {
+        let identifier = IDIdentifier::new();
+        if let Ok(estimand) = identifier.id_index(&g, &t_set, &y_set) {
             assert_eq!(format!("{}", estimand), "∑{X1}(P(X1)P(Y|X2,X1,T))");
         } else {
             unreachable!();
@@ -405,6 +477,7 @@ mod tests {
 
     #[test]
     fn test_no_direct_cause_dag() {
+        // T, X -> Y
         let mut g = ADMG::<&str>::new();
         let t = g.add_node("T");
         let x = g.add_node("X");
@@ -412,8 +485,8 @@ mod tests {
         g.add_edge(x, y, ());
         let t_set: OrderedSet<NodeIndex> = [t].iter().copied().collect();
         let y_set: OrderedSet<NodeIndex> = [y].iter().copied().collect();
-        let identifier = IDIdentifier {};
-        if let Ok(estimand) = identifier.id_index(&y_set, &t_set, &g) {
+        let identifier = IDIdentifier::new();
+        if let Ok(estimand) = identifier.id_index(&g, &t_set, &y_set) {
             assert_eq!(format!("{}", estimand), "∑{X}(P(X,Y))");
         } else {
             unreachable!();
