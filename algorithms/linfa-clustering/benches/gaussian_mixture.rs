@@ -2,21 +2,25 @@ use criterion::{
     black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
     PlotConfiguration,
 };
+use linfa::benchmarks::config;
 use linfa::traits::Fit;
 use linfa::DatasetBase;
-use linfa_clustering::{generate_blobs, GaussianMixtureModel};
+use linfa_clustering::GaussianMixtureModel;
+use linfa_datasets::generate;
 use ndarray::Array2;
 use ndarray_rand::rand::SeedableRng;
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
-use rand_isaac::Isaac64Rng;
+use rand_xoshiro::Xoshiro256Plus;
 
 fn gaussian_mixture_bench(c: &mut Criterion) {
-    let mut rng = Isaac64Rng::seed_from_u64(40);
+    let mut rng = Xoshiro256Plus::seed_from_u64(40);
     let cluster_sizes = vec![10, 100, 1000, 10000];
 
     let mut benchmark = c.benchmark_group("gaussian_mixture");
+    config::set_default_benchmark_configs(&mut benchmark);
     benchmark.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+
     for cluster_size in cluster_sizes {
         let rng = &mut rng;
         benchmark.bench_with_input(
@@ -28,7 +32,7 @@ fn gaussian_mixture_bench(c: &mut Criterion) {
                 let centroids =
                     Array2::random_using((n_clusters, n_features), Uniform::new(-30., 30.), rng);
                 let dataset: DatasetBase<_, _> =
-                    (generate_blobs(cluster_size, &centroids, rng)).into();
+                    (generate::blobs(cluster_size, &centroids, rng)).into();
                 bencher.iter(|| {
                     black_box(
                         GaussianMixtureModel::params(n_clusters)
@@ -45,9 +49,13 @@ fn gaussian_mixture_bench(c: &mut Criterion) {
     benchmark.finish();
 }
 
+#[cfg(not(target_os = "windows"))]
 criterion_group! {
   name = benches;
-  config = Criterion::default();
+  config = config::get_default_profiling_configs();
   targets = gaussian_mixture_bench
 }
+#[cfg(target_os = "windows")]
+criterion_group!(benches, gaussian_mixture_bench);
+
 criterion_main!(benches);

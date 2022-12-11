@@ -1,10 +1,11 @@
 [package]
 name = "linfa"
-version = "0.5.0"
+version = "0.6.1"
 authors = [
     "Luca Palmieri <rust@lpalmieri.com>",
     "Lorenz Schmidt <bytesnake@mailbox.org>",
-    "Paul Körbitz <koerbitz@google.com>"
+    "Paul Körbitz <koerbitz@google.com>",
+    "Yuhan Lin <yuhanliin@protonmail.com>"
 ]
 description = "A Machine Learning framework for Rust"
 edition = "2018"
@@ -20,15 +21,15 @@ exclude = [".github/"]
 
 [features]
 default = []
+benchmarks = ["criterion", "pprof"]
+netlib-static = ["blas", "ndarray-linalg/netlib-static"]
+netlib-system = ["blas", "ndarray-linalg/netlib-system"]
 
-netlib-static = ["blas", "ndarray-linalg", "netlib-src/static"]
-netlib-system = ["blas", "ndarray-linalg", "netlib-src/system"]
+openblas-static = ["blas", "ndarray-linalg/openblas-static"]
+openblas-system = ["blas", "ndarray-linalg/openblas-system"]
 
-openblas-static = ["blas", "ndarray-linalg", "openblas-src/static"]
-openblas-system = ["blas", "ndarray-linalg", "openblas-src/system"]
-
-intel-mkl-static = ["blas", "ndarray-linalg", "intel-mkl-src/mkl-static-lp64-seq", "intel-mkl-src/download", "anyhow"]
-intel-mkl-system = ["blas", "ndarray-linalg", "intel-mkl-src/mkl-dynamic-lp64-seq", "anyhow"]
+intel-mkl-static = ["blas", "ndarray-linalg/intel-mkl-static"]
+intel-mkl-system = ["blas", "ndarray-linalg/intel-mkl-system"]
 
 blas = ["ndarray/blas"]
 
@@ -39,12 +40,12 @@ num-traits = "0.2"
 rand = { version = "0.8", features = ["small_rng"] }
 approx = "0.4"
 
-ndarray = { version = "0.15", default-features = false, features = ["approx"] }
-ndarray-linalg = { version = "0.14", optional = true }
+ndarray = { version = "0.15", features = ["approx"] }
+ndarray-linalg = { version = "0.15", optional = true }
 
 thiserror = "1.0"
-# Temporary fix for compatibility issue between intel-mkl-tool and anyhow (https://github.com/rust-math/intel-mkl-src/issues/68)
-anyhow = { version = "<=1.0.48", optional = true }
+
+criterion = { version = "0.4.0", optional = true}
 
 [dependencies.serde_crate]
 package = "serde"
@@ -53,26 +54,13 @@ version = "1.0"
 default-features = false
 features = ["std", "derive"]
 
-[dependencies.intel-mkl-src]
-version = "0.6.0"
-default-features = false
-optional = true
-
-[dependencies.netlib-src]
-version = "0.8.0"
-optional = true
-features = ["cblas"]
-default-features = false
-
-[dependencies.openblas-src]
-version = "0.10.4"
-optional = true
-default-features = false
-features = ["cblas"]
-
 [dev-dependencies]
 ndarray-rand = "0.14"
-linfa-datasets = { path = "datasets", features = ["winequality", "iris", "diabetes"] }
+linfa-datasets = { path = "datasets", features = ["winequality", "iris", "diabetes", "generate"] }
+statrs = "0.16.0"
+
+[target.'cfg(not(windows))'.dependencies]
+pprof = { version = "0.11.0", features = ["flamegraph", "criterion"], optional = true}
 
 [workspace]
 members = [

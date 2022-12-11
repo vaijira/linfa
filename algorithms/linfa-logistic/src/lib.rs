@@ -5,7 +5,7 @@
 //! `linfa-logistic` is a crate in the [`linfa`](https://crates.io/crates/linfa) ecosystem, an effort to create a toolkit for classical Machine Learning implemented in pure Rust, akin to Python's `scikit-learn`.
 //!
 //! ## Current state
-//! `linfa-logistic` provides a pure Rust implementation of a [binomial logistic regression model](struct.LogisticRegression.html) and a [multinomial logistic regression model](struct.MultiLogisticRegression).
+//! `linfa-logistic` provides a pure Rust implementation of a [binomial logistic regression model](LogisticRegression) and a [multinomial logistic regression model](MultiLogisticRegression).
 //!
 //! ## Examples
 //!
@@ -22,13 +22,15 @@ use crate::error::{Error, Result};
 use argmin::prelude::*;
 use argmin::solver::linesearch::MoreThuenteLineSearch;
 use argmin::solver::quasinewton::lbfgs::LBFGS;
-use linfa::prelude::{AsTargets, DatasetBase};
+use linfa::dataset::AsSingleTargets;
+use linfa::prelude::DatasetBase;
 use linfa::traits::{Fit, PredictInplace};
 use ndarray::{
     s, Array, Array1, Array2, ArrayBase, ArrayView, ArrayView2, Axis, CowArray, Data, DataMut,
     Dimension, IntoDimension, Ix1, Ix2, RemoveAxis, Slice, Zip,
 };
 use ndarray_stats::QuantileExt;
+use serde::{Deserialize, Serialize};
 use std::default::Default;
 
 mod argmin_param;
@@ -47,7 +49,7 @@ use hyperparams::{LogisticRegressionParams, LogisticRegressionValidParams};
 ///
 /// Logistic regression is used in binary classification
 /// by interpreting the predicted value as the probability that the sample
-/// has label `1`. A threshold can be set in the [fitted model](struct.FittedLogisticRegression.html) to decide the minimum
+/// has label `1`. A threshold can be set in the [fitted model](FittedLogisticRegression) to decide the minimum
 /// probability needed to classify a sample as `1`, which defaults to `0.5`.
 ///
 /// In this implementation any binary set of labels can be used, not necessarily `0` and `1`.
@@ -185,7 +187,7 @@ impl<F: Float, D: Dimension> LogisticRegressionValidParams<F, D> {
     }
 }
 
-impl<'a, C: 'a + Ord + Clone, F: Float, D: Data<Elem = F>, T: AsTargets<Elem = C>>
+impl<'a, C: 'a + Ord + Clone, F: Float, D: Data<Elem = F>, T: AsSingleTargets<Elem = C>>
     Fit<ArrayBase<D, Ix2>, T, Error> for ValidLogisticRegression<F>
 {
     type Object = FittedLogisticRegression<F, C>;
@@ -225,7 +227,7 @@ impl<'a, C: 'a + Ord + Clone, F: Float, D: Data<Elem = F>, T: AsTargets<Elem = C
     }
 }
 
-impl<'a, C: 'a + Ord + Clone, F: Float, D: Data<Elem = F>, T: AsTargets<Elem = C>>
+impl<'a, C: 'a + Ord + Clone, F: Float, D: Data<Elem = F>, T: AsSingleTargets<Elem = C>>
     Fit<ArrayBase<D, Ix2>, T, Error> for ValidMultiLogisticRegression<F>
 {
     type Object = MultiFittedLogisticRegression<F, C>;
@@ -268,10 +270,10 @@ impl<'a, C: 'a + Ord + Clone, F: Float, D: Data<Elem = F>, T: AsTargets<Elem = C
 fn label_classes<F, T, C>(y: T) -> Result<(ClassLabels<F, C>, Array1<F>)>
 where
     F: Float,
-    T: AsTargets<Elem = C>,
+    T: AsSingleTargets<Elem = C>,
     C: Ord + Clone,
 {
-    let y_single_target = y.try_single_target()?;
+    let y_single_target = y.as_single_targets();
     let mut classes: Vec<&C> = vec![];
     let mut target_vec = vec![];
     let mut use_negative_label: bool = true;
@@ -324,10 +326,10 @@ where
 fn label_classes_multi<F, T, C>(y: T) -> Result<(Vec<C>, Array2<F>)>
 where
     F: Float,
-    T: AsTargets<Elem = C>,
+    T: AsSingleTargets<Elem = C>,
     C: Ord + Clone,
 {
-    let y_single_target = y.try_single_target()?;
+    let y_single_target = y.as_single_targets();
     let mut classes = y_single_target.to_vec();
     // Dedup the list of classes
     classes.sort();
@@ -523,7 +525,8 @@ fn multi_logistic_grad<F: Float, A: Data<Elem = F>>(
 }
 
 /// A fitted logistic regression which can make predictions
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(deserialize = "C: Deserialize<'de>"))]
 pub struct FittedLogisticRegression<F: Float, C: PartialOrd + Clone> {
     threshold: F,
     intercept: F,
@@ -609,8 +612,8 @@ impl<C: PartialOrd + Clone + Default, F: Float, D: Data<Elem = F>>
 }
 
 /// A fitted multinomial logistic regression which can make predictions
-#[derive(PartialEq, Debug)]
-pub struct MultiFittedLogisticRegression<F: Float, C: PartialOrd + Clone> {
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+pub struct MultiFittedLogisticRegression<F, C: PartialOrd + Clone> {
     intercept: Array1<F>,
     params: Array2<F>,
     classes: Vec<C>,
@@ -684,8 +687,8 @@ impl<C: PartialOrd + Clone + Default, F: Float, D: Data<Elem = F>>
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
-struct ClassLabel<F: Float, C: PartialOrd> {
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
+struct ClassLabel<F, C: PartialOrd> {
     class: C,
     label: F,
 }
@@ -776,7 +779,15 @@ mod test {
     use super::*;
     use approx::{assert_abs_diff_eq, assert_relative_eq, AbsDiffEq};
     use linfa::prelude::*;
-    use ndarray::{array, Array2};
+    use ndarray::{array, Array2, Dim, Ix};
+
+    #[test]
+    fn autotraits() {
+        fn has_autotraits<T: Send + Sync + Sized + Unpin>() {}
+        has_autotraits::<LogisticRegressionParams<f64, Dim<[Ix; 0]>>>();
+        has_autotraits::<LogisticRegressionValidParams<f64, Dim<[Ix; 0]>>>();
+        has_autotraits::<ArgminParam<f64, Dim<[Ix; 0]>>>();
+    }
 
     /// Test that the logistic loss function works as expected.
     /// The expected values were obtained from running sklearn's
@@ -912,7 +923,7 @@ mod test {
         assert!(res.params().abs_diff_eq(&array![0.681], 1e-3));
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
     }
 
@@ -930,7 +941,7 @@ mod test {
             .abs_diff_eq(&array![0.501, 0.664, 0.335, 0.498], 1e-3));
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
     }
 
@@ -954,20 +965,8 @@ mod test {
         let res = log_reg.fit(&dataset).unwrap();
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
-    }
-
-    #[test]
-    fn rejects_multi_target() {
-        let log_reg = LogisticRegression::default();
-        let x = array![[0.01], [1.0], [-1.0], [-0.01]];
-        let y = array![[0, 0], [0, 0], [0, 0], [0, 0]];
-        let res = log_reg.fit(&Dataset::new(x, y));
-        assert!(matches!(
-            res.unwrap_err(),
-            Error::LinfaError(linfa::Error::MultipleTargets)
-        ));
     }
 
     #[test]
@@ -1067,8 +1066,17 @@ mod test {
         assert!(res.params().abs_diff_eq(&array![1.181], 1e-3));
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
+
+        // Test serialization
+        let ser = rmp_serde::to_vec(&res).unwrap();
+        let unser: FittedLogisticRegression<f32, f32> = rmp_serde::from_slice(&ser).unwrap();
+
+        let x = array![[1.0]];
+        let y_hat = unser.predict(&x);
+
+        assert!(y_hat[0] == 0.0);
     }
 
     #[test]
@@ -1082,7 +1090,7 @@ mod test {
         assert!(res.params().abs_diff_eq(&array![0.682_f32], 1e-3));
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
     }
 
@@ -1206,7 +1214,7 @@ mod test {
         assert_eq!(res.intercept().dim(), 3);
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
     }
 
@@ -1221,7 +1229,7 @@ mod test {
         assert_eq!(res.intercept().dim(), 4);
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
     }
 
@@ -1247,7 +1255,7 @@ mod test {
         assert_eq!(res.intercept().dim(), 2);
         assert_eq!(
             &res.predict(dataset.records()),
-            dataset.targets().try_single_target().unwrap()
+            dataset.targets().as_single_targets()
         );
     }
 

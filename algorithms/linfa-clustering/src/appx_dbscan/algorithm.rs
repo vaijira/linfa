@@ -12,7 +12,7 @@ use super::cells_grid::CellsGrid;
     derive(Serialize, Deserialize),
     serde(crate = "serde_crate")
 )]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// DBSCAN (Density-based Spatial Clustering of Applications with Noise)
 /// clusters together neighbouring points, while points in sparse regions are labelled
 /// as noise. Since points may be part of a cluster or noise the transform method returns
@@ -59,23 +59,24 @@ use super::cells_grid::CellsGrid;
 /// Let's do a walkthrough of an example running the approximated DBSCAN on some data.
 ///
 /// ```rust
-/// use linfa_clustering::{AppxDbscan, generate_blobs};
+/// use linfa_clustering::AppxDbscan;
 /// use linfa::traits::Transformer;
+/// use linfa_datasets::generate;
 /// use ndarray::{Axis, array, s};
 /// use ndarray_rand::rand::SeedableRng;
-/// use rand_isaac::Isaac64Rng;
+/// use rand_xoshiro::Xoshiro256Plus;
 /// use approx::assert_abs_diff_eq;
 ///
 /// // Our random number generator, seeded for reproducibility
 /// let seed = 42;
-/// let mut rng = Isaac64Rng::seed_from_u64(seed);
+/// let mut rng = Xoshiro256Plus::seed_from_u64(seed);
 ///
 /// // `expected_centroids` has shape `(n_centroids, n_features)`
 /// // i.e. three points in the 2-dimensional plane
 /// let expected_centroids = array![[0., 1.], [-10., 20.], [-1., 10.]];
 /// // Let's generate a synthetic dataset: three blobs of observations
 /// // (100 points each) centered around our `expected_centroids`
-/// let observations = generate_blobs(100, &expected_centroids, &mut rng);
+/// let observations = generate::blobs(100, &expected_centroids, &mut rng);
 ///
 /// // Let's configure and run our AppxDbscan algorithm
 /// // We use the builder pattern to specify the hyperparameters

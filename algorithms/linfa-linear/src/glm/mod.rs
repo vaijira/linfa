@@ -7,7 +7,9 @@ mod link;
 use crate::error::{LinearError, Result};
 use crate::float::{ArgminParam, Float};
 use distribution::TweedieDistribution;
-use hyperparams::TweedieRegressorValidParams;
+pub use hyperparams::TweedieRegressorParams;
+pub use hyperparams::TweedieRegressorValidParams;
+use linfa::dataset::AsSingleTargets;
 pub use link::Link;
 
 use argmin::core::{ArgminOp, Executor};
@@ -18,15 +20,15 @@ use ndarray::{Array, Array1, ArrayBase, ArrayView1, ArrayView2, Axis, Data, Ix2}
 use serde::{Deserialize, Serialize};
 
 use linfa::traits::*;
-use linfa::{dataset::AsTargets, DatasetBase};
+use linfa::DatasetBase;
 
-impl<F: Float, D: Data<Elem = F>, T: AsTargets<Elem = F>> Fit<ArrayBase<D, Ix2>, T, LinearError<F>>
-    for TweedieRegressorValidParams<F>
+impl<F: Float, D: Data<Elem = F>, T: AsSingleTargets<Elem = F>>
+    Fit<ArrayBase<D, Ix2>, T, LinearError<F>> for TweedieRegressorValidParams<F>
 {
     type Object = TweedieRegressor<F>;
 
     fn fit(&self, ds: &DatasetBase<ArrayBase<D, Ix2>, T>) -> Result<Self::Object, F> {
-        let (x, y) = (ds.records(), ds.try_single_target()?);
+        let (x, y) = (ds.records(), ds.as_single_targets());
 
         let dist = TweedieDistribution::new(self.power())?;
         let link = self.link();
@@ -170,8 +172,39 @@ impl<'a, A: Float> ArgminOp for TweedieProblem<'a, A> {
     }
 }
 
-/// Fitted Tweedie regressor model for scoring
-#[derive(Serialize, Deserialize)]
+/// Generalized Linear Model (GLM) with a Tweedie distribution
+///
+/// The Regressor can be used to model different GLMs depending on
+/// [`power`](TweedieRegressorParams),
+/// which determines the underlying distribution.
+///
+/// | Power  | Distribution           |
+/// | ------ | ---------------------- |
+/// | 0      | Normal                 |
+/// | 1      | Poisson                |
+/// | (1, 2) | Compound Poisson Gamma |
+/// | 2      | Gamma                  |
+/// | 3      | Inverse Gaussian       |
+///
+/// NOTE: No distribution exists between 0 and 1
+///
+/// Learn more from sklearn's excellent [User Guide](https://scikit-learn.org/stable/modules/linear_model.html#generalized-linear-regression)
+///
+/// ## Examples
+///
+/// Here's an example on how to train a GLM on the `diabetes` dataset
+/// ```rust
+/// use linfa::traits::{Fit, Predict};
+/// use linfa_linear::TweedieRegressor;
+/// use linfa::prelude::SingleTargetRegression;
+///
+/// let dataset = linfa_datasets::diabetes();
+/// let model = TweedieRegressor::params().fit(&dataset).unwrap();
+/// let pred = model.predict(&dataset);
+/// let r2 = pred.r2(&dataset).unwrap();
+/// println!("r2 from prediction: {}", r2);
+/// ```
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct TweedieRegressor<A> {
     /// Estimated coefficients for the linear predictor
     pub coef: Array1<A>,
@@ -203,9 +236,18 @@ impl<A: Float, D: Data<Elem = A>> PredictInplace<ArrayBase<D, Ix2>, Array1<A>>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::glm::hyperparams::TweedieRegressorParams;
     use approx::assert_abs_diff_eq;
     use linfa::Dataset;
     use ndarray::{array, Array2};
+
+    #[test]
+    fn autotraits() {
+        fn has_autotraits<T: Send + Sync + Sized + Unpin>() {}
+        has_autotraits::<TweedieRegressor<f64>>();
+        has_autotraits::<TweedieRegressorValidParams<f64>>();
+        has_autotraits::<TweedieRegressorParams<f64>>();
+    }
 
     macro_rules! test_tweedie {
         ($($name:ident: {power: $power:expr, intercept: $intercept:expr,},)*) => {

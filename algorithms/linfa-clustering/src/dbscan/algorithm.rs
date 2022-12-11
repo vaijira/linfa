@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use linfa::Float;
 use linfa::{traits::Transformer, DatasetBase};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// DBSCAN (Density-based Spatial Clustering of Applications with Noise)
 /// clusters together points which are close together with enough neighbors
 /// labelled points which are sparsely neighbored as noise. As points may be
@@ -41,23 +41,24 @@ use linfa::{traits::Transformer, DatasetBase};
 /// Let's do a walkthrough of an example running DBSCAN on some data.
 ///
 /// ```rust
-/// use linfa::traits::Transformer;
-/// use linfa_clustering::{DbscanParams, Dbscan, generate_blobs};
+/// use linfa::traits::*;
+/// use linfa_clustering::{DbscanParams, Dbscan};
+/// use linfa_datasets::generate;
 /// use ndarray::{Axis, array, s};
 /// use ndarray_rand::rand::SeedableRng;
-/// use rand_isaac::Isaac64Rng;
+/// use rand_xoshiro::Xoshiro256Plus;
 /// use approx::assert_abs_diff_eq;
 ///
 /// // Our random number generator, seeded for reproducibility
 /// let seed = 42;
-/// let mut rng = Isaac64Rng::seed_from_u64(seed);
+/// let mut rng = Xoshiro256Plus::seed_from_u64(seed);
 ///
 /// // `expected_centroids` has shape `(n_centroids, n_features)`
 /// // i.e. three points in the 2-dimensional plane
 /// let expected_centroids = array![[0., 1.], [-10., 20.], [-1., 10.]];
 /// // Let's generate a synthetic dataset: three blobs of observations
 /// // (100 points each) centered around our `expected_centroids`
-/// let observations = generate_blobs(100, &expected_centroids, &mut rng);
+/// let observations = generate::blobs(100, &expected_centroids, &mut rng);
 ///
 /// // Let's configure and run our DBSCAN algorithm
 /// // We use the builder pattern to specify the hyperparameters

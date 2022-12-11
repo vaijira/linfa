@@ -1,6 +1,6 @@
 [package]
 name = "linfa-clustering"
-version = "0.5.0"
+version = "0.6.1"
 edition = "2018"
 authors = [
     "Luca Palmieri <rust@lpalmieri.com>",
@@ -29,24 +29,27 @@ features = ["std", "derive"]
 
 [dependencies]
 ndarray = { version = "0.15", features = ["rayon", "approx"]}
-ndarray-linalg = "0.14"
+linfa-linalg = { version = "0.1", default-features = false }
+ndarray-linalg = { version = "0.15", optional = true }
 ndarray-rand = "0.14"
 ndarray-stats = "0.5"
 num-traits = "0.2"
-rand_isaac = "0.3"
+rand_xoshiro = "0.6"
 space = "0.12"
 thiserror = "1.0"
 partitions = "0.2.4"
-linfa = { version = "0.5.0", path = "../..", features = ["ndarray-linalg"] }
-linfa-nn = { version = "0.5.0", path = "../linfa-nn" }
+linfa = { version = "0.6.1", path = "../.." }
+linfa-nn = { version = "0.6.1", path = "../linfa-nn" }
 noisy_float = "0.2.0"
 
 [dev-dependencies]
 ndarray-npy = { version = "0.8", default-features = false }
-criterion = "0.3.5"
+linfa-datasets = { version = "0.6.1", path = "../../datasets", features = ["generate"] }
+criterion = "0.4.0"
 serde_json = "1"
 approx = "0.4"
-lax = "0.2.0"
+lax = "0.15.0"
+linfa = { version = "0.6.0", path = "../..", features = ["benchmarks"] }
 
 [[bench]]
 name = "k_means"

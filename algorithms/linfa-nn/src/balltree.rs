@@ -10,7 +10,7 @@ use serde_crate::{Deserialize, Serialize};
 use crate::{
     distance::Distance,
     heap_elem::{MaxHeapElem, MinHeapElem},
-    BuildError, NearestNeighbour, NearestNeighbourIndex, NnError, Point,
+    BuildError, NearestNeighbour, NearestNeighbourBox, NearestNeighbourIndex, NnError, Point,
 };
 
 // Partition the points using median value
@@ -73,7 +73,7 @@ fn calc_radius<'a, F: Float, D: Distance<F>>(
     dist_fn.rdist_to_dist(r_rad)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 enum BallTreeInner<'a, F: Float> {
     // Leaf node sphere
     Leaf {
@@ -158,8 +158,8 @@ impl<'a, F: Float> BallTreeInner<'a, F> {
     }
 }
 
-/// Spatial indexing structure created by [`BallTree`](struct.BallTree.html)
-#[derive(Debug)]
+/// Spatial indexing structure created by [`BallTree`](BallTree)
+#[derive(Debug, Clone, PartialEq)]
 pub struct BallTreeIndex<'a, F: Float, D: Distance<F>> {
     tree: BallTreeInner<'a, F>,
     dist_fn: D,
@@ -282,11 +282,11 @@ impl<'a, F: Float, D: Distance<F>> NearestNeighbourIndex<F> for BallTreeIndex<'a
 /// Implementation of ball tree, a space partitioning data structure that partitions its points
 /// into nested hyperspheres called "balls". It performs spatial queries in `O(k * logN)` time,
 /// where `k` is the number of points returned by the query. Calling `from_batch` returns a
-/// [`BallTreeIndex`](struct.BallTreeIndex.html).
+/// [`BallTreeIndex`](BallTreeIndex).
 ///
 /// More details can be found [here](https://en.wikipedia.org/wiki/Ball_tree). This implementation
 /// is based off of the [ball_tree](https://docs.rs/ball-tree/0.2.0/ball_tree/) crate.
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -307,9 +307,8 @@ impl NearestNeighbour for BallTree {
         batch: &'a ArrayBase<DT, Ix2>,
         leaf_size: usize,
         dist_fn: D,
-    ) -> Result<Box<dyn 'a + NearestNeighbourIndex<F>>, BuildError> {
-        BallTreeIndex::new(batch, leaf_size, dist_fn)
-            .map(|v| Box::new(v) as Box<dyn NearestNeighbourIndex<F>>)
+    ) -> Result<NearestNeighbourBox<'a, F>, BuildError> {
+        BallTreeIndex::new(batch, leaf_size, dist_fn).map(|v| Box::new(v) as NearestNeighbourBox<F>)
     }
 }
 
@@ -321,6 +320,14 @@ mod test {
     use crate::distance::L2Dist;
 
     use super::*;
+
+    #[test]
+    fn autotraits() {
+        fn has_autotraits<T: Send + Sync + Sized + Unpin>() {}
+        has_autotraits::<BallTree>();
+        has_autotraits::<BallTreeIndex<f64, L2Dist>>();
+        has_autotraits::<BallTreeInner<f64>>();
+    }
 
     fn assert_partition(
         input: Array2<f64>,

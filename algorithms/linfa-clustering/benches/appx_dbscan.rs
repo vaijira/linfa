@@ -2,16 +2,18 @@ use criterion::{
     black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
     PlotConfiguration,
 };
+use linfa::benchmarks::config;
 use linfa::traits::Transformer;
-use linfa_clustering::{generate_blobs, AppxDbscan};
+use linfa_clustering::AppxDbscan;
+use linfa_datasets::generate;
 use ndarray::Array2;
 use ndarray_rand::rand::SeedableRng;
 use ndarray_rand::rand_distr::Uniform;
 use ndarray_rand::RandomExt;
-use rand_isaac::Isaac64Rng;
+use rand_xoshiro::Xoshiro256Plus;
 
 fn appx_dbscan_bench(c: &mut Criterion) {
-    let mut rng = Isaac64Rng::seed_from_u64(40);
+    let mut rng = Xoshiro256Plus::seed_from_u64(40);
     let cluster_sizes_and_slacks = vec![
         (10, 0.00001),
         (100, 0.00001),
@@ -20,7 +22,9 @@ fn appx_dbscan_bench(c: &mut Criterion) {
     ];
 
     let mut benchmark = c.benchmark_group("appx_dbscan");
+    config::set_default_benchmark_configs(&mut benchmark);
     benchmark.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+
     for cluster_size_and_slack in cluster_sizes_and_slacks {
         let rng = &mut rng;
         benchmark.bench_with_input(
@@ -32,7 +36,7 @@ fn appx_dbscan_bench(c: &mut Criterion) {
                 let tolerance = 0.3;
                 let centroids =
                     Array2::random_using((min_points, n_features), Uniform::new(-30., 30.), rng);
-                let dataset = generate_blobs(cluster_size_and_slack.0, &centroids, rng);
+                let dataset = generate::blobs(cluster_size_and_slack.0, &centroids, rng);
                 bencher.iter(|| {
                     black_box(
                         AppxDbscan::params(min_points)
@@ -47,9 +51,13 @@ fn appx_dbscan_bench(c: &mut Criterion) {
     benchmark.finish();
 }
 
+#[cfg(not(target_os = "windows"))]
 criterion_group! {
     name = benches;
-    config = Criterion::default();
+    config = config::get_default_profiling_configs();
     targets = appx_dbscan_bench
 }
+#[cfg(target_os = "windows")]
+criterion_group!(benches, appx_dbscan_bench);
+
 criterion_main!(benches);

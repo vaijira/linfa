@@ -4,10 +4,11 @@ use ndarray::{aview1, ArrayBase, Data, Ix2};
 use serde_crate::{Deserialize, Serialize};
 
 use crate::{
-    distance::Distance, BuildError, NearestNeighbour, NearestNeighbourIndex, NnError, Point,
+    distance::Distance, BuildError, NearestNeighbour, NearestNeighbourBox, NearestNeighbourIndex,
+    NnError, Point,
 };
 
-/// Spatial indexing structure created by [`KdTree`](struct.KdTree.html)
+/// Spatial indexing structure created by [`KdTree`](KdTree)
 #[derive(Debug)]
 pub struct KdTreeIndex<'a, F: Float, D: Distance<F>>(
     kdtree::KdTree<F, (Point<'a, F>, usize), &'a [F]>,
@@ -89,13 +90,13 @@ impl<'a, F: Float, D: Distance<F>> NearestNeighbourIndex<F> for KdTreeIndex<'a, 
 /// Implementation of K-D tree, a fast space-partitioning data structure.  For each parent node,
 /// the indexed points are split with a hyperplane into two child nodes. Due to its tree-like
 /// structure, the K-D tree performs spatial queries in `O(k * logN)` time, where `k` is the number
-/// of points returned by the query. Calling `from_batch` returns a [`KdTree`](struct.KdTree.html).
+/// of points returned by the query. Calling `from_batch` returns a [`KdTree`](KdTree).
 ///
 /// More details can be found [here](https://en.wikipedia.org/wiki/K-d_tree).
 ///
 /// Unlike other `NearestNeighbour` implementations, `KdTree` requires that points be laid out
 /// contiguously in memory and will panic otherwise.
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(
     feature = "serde",
     derive(Serialize, Deserialize),
@@ -116,8 +117,7 @@ impl NearestNeighbour for KdTree {
         batch: &'a ArrayBase<DT, Ix2>,
         leaf_size: usize,
         dist_fn: D,
-    ) -> Result<Box<dyn 'a + NearestNeighbourIndex<F>>, BuildError> {
-        KdTreeIndex::new(batch, leaf_size, dist_fn)
-            .map(|v| Box::new(v) as Box<dyn NearestNeighbourIndex<F>>)
+    ) -> Result<NearestNeighbourBox<'a, F>, BuildError> {
+        KdTreeIndex::new(batch, leaf_size, dist_fn).map(|v| Box::new(v) as NearestNeighbourBox<F>)
     }
 }

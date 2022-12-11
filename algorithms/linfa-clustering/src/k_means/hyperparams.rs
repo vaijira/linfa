@@ -15,7 +15,7 @@ use serde_crate::{Deserialize, Serialize};
 )]
 #[derive(Clone, Debug, PartialEq)]
 /// The set of hyperparameters that can be specified for the execution of
-/// the [K-means algorithm](struct.KMeans.html).
+/// the [K-means algorithm](crate::KMeans).
 pub struct KMeansValidParams<F: Float, R: Rng, D: Distance<F>> {
     /// Number of time the k-means algorithm will be run with different centroid seeds.
     n_runs: usize,
@@ -37,8 +37,9 @@ pub struct KMeansValidParams<F: Float, R: Rng, D: Distance<F>> {
     dist_fn: D,
 }
 
-/// An helper struct used to construct a set of [valid hyperparameters](struct.KMeansParams.html) for
-/// the [K-means algorithm](struct.KMeans.html) (using the builder pattern).
+#[derive(Clone, Debug, PartialEq)]
+/// An helper struct used to construct a set of [valid hyperparameters](KMeansParams) for
+/// the [K-means algorithm](crate::KMeans) (using the builder pattern).
 pub struct KMeansParams<F: Float, R: Rng, D: Distance<F>>(KMeansValidParams<F, R, D>);
 
 impl<F: Float, R: Rng, D: Distance<F>> KMeansParams<F, R, D> {
@@ -164,8 +165,17 @@ impl<F: Float, R: Rng, D: Distance<F>> KMeansValidParams<F, R, D> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{KMeans, KMeansParamsError};
+    use crate::{KMeans, KMeansParams, KMeansParamsError, KMeansValidParams};
     use linfa::ParamGuard;
+    use linfa_nn::distance::L2Dist;
+    use rand_xoshiro::Xoshiro256Plus;
+
+    #[test]
+    fn autotraits() {
+        fn has_autotraits<T: Send + Sync + Sized + Unpin>() {}
+        has_autotraits::<KMeansParams<f64, Xoshiro256Plus, L2Dist>>();
+        has_autotraits::<KMeansValidParams<f64, Xoshiro256Plus, L2Dist>>();
+    }
 
     #[test]
     fn n_clusters_cannot_be_zero() {

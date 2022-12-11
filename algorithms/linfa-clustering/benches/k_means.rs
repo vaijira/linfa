@@ -2,13 +2,15 @@ use criterion::{
     black_box, criterion_group, criterion_main, AxisScale, BenchmarkId, Criterion,
     PlotConfiguration,
 };
+use linfa::benchmarks::config;
 use linfa::prelude::*;
 use linfa::DatasetBase;
-use linfa_clustering::{generate_blobs, IncrKMeansError, KMeans, KMeansInit};
+use linfa_clustering::{IncrKMeansError, KMeans, KMeansInit};
+use linfa_datasets::generate;
 use ndarray::Array2;
 use ndarray_rand::RandomExt;
 use ndarray_rand::{rand::SeedableRng, rand_distr::Uniform};
-use rand_isaac::Isaac64Rng;
+use rand_xoshiro::Xoshiro256Plus;
 
 #[derive(Default)]
 struct Stats {
@@ -32,17 +34,19 @@ impl Drop for Stats {
 }
 
 fn k_means_bench(c: &mut Criterion) {
-    let mut rng = Isaac64Rng::seed_from_u64(40);
+    let mut rng = Xoshiro256Plus::seed_from_u64(40);
     let cluster_sizes = [(100, 4), (400, 10), (3000, 10)];
     let n_features = 3;
 
     let mut benchmark = c.benchmark_group("naive_k_means");
+    config::set_default_benchmark_configs(&mut benchmark);
     benchmark.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+
     for &(cluster_size, n_clusters) in &cluster_sizes {
         let rng = &mut rng;
         let centroids =
             Array2::random_using((n_clusters, n_features), Uniform::new(-30., 30.), rng);
-        let dataset = DatasetBase::from(generate_blobs(cluster_size, &centroids, rng));
+        let dataset = DatasetBase::from(generate::blobs(cluster_size, &centroids, rng));
         let mut stats = Stats::default();
 
         benchmark.bench_function(
@@ -65,17 +69,20 @@ fn k_means_bench(c: &mut Criterion) {
 }
 
 fn k_means_incr_bench(c: &mut Criterion) {
-    let mut rng = Isaac64Rng::seed_from_u64(40);
+    let mut rng = Xoshiro256Plus::seed_from_u64(40);
     let cluster_sizes = [(100, 4), (400, 10), (3000, 10)];
     let n_features = 3;
 
     let mut benchmark = c.benchmark_group("incremental_k_means");
+    config::set_default_benchmark_configs(&mut benchmark);
     benchmark.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
+
     for &(cluster_size, n_clusters) in &cluster_sizes {
         let rng = &mut rng;
         let centroids =
             Array2::random_using((n_clusters, n_features), Uniform::new(-30., 30.), rng);
-        let dataset = DatasetBase::from(generate_blobs(cluster_size, &centroids, rng)).shuffle(rng);
+        let dataset =
+            DatasetBase::from(generate::blobs(cluster_size, &centroids, rng)).shuffle(rng);
         let mut stats = Stats::default();
 
         benchmark.bench_function(
@@ -114,19 +121,20 @@ fn k_means_incr_bench(c: &mut Criterion) {
 }
 
 fn k_means_init_bench(c: &mut Criterion) {
-    let mut rng = Isaac64Rng::seed_from_u64(40);
+    let mut rng = Xoshiro256Plus::seed_from_u64(40);
     let init_methods = [KMeansInit::KMeansPlusPlus, KMeansInit::KMeansPara];
     let cluster_sizes = [(100, 10), (3000, 10), (400, 30), (500, 100)];
     let n_features = 3;
 
     let mut benchmark = c.benchmark_group("k_means_init");
+    config::set_default_benchmark_configs(&mut benchmark);
     benchmark.plot_config(PlotConfiguration::default().summary_scale(AxisScale::Logarithmic));
     for init in &init_methods {
         for &(cluster_size, n_clusters) in &cluster_sizes {
             let rng = &mut rng;
             let centroids =
                 Array2::random_using((n_clusters, n_features), Uniform::new(-30., 30.), rng);
-            let dataset = DatasetBase::from(generate_blobs(cluster_size, &centroids, rng));
+            let dataset = DatasetBase::from(generate::blobs(cluster_size, &centroids, rng));
             let mut stats = Stats::default();
 
             benchmark.bench_function(
@@ -153,9 +161,18 @@ fn k_means_init_bench(c: &mut Criterion) {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 criterion_group! {
     name = benches;
-    config = Criterion::default();
+    config = config::get_default_profiling_configs();
     targets = k_means_bench, k_means_init_bench, k_means_incr_bench
 }
+#[cfg(target_os = "windows")]
+criterion_group!(
+    benches,
+    k_means_bench,
+    k_means_init_bench,
+    k_means_incr_bench
+);
+
 criterion_main!(benches);

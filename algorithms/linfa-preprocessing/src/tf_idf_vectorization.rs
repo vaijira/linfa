@@ -7,7 +7,7 @@ use encoding::DecoderTrap;
 use ndarray::{Array1, ArrayBase, Data, Ix1};
 use sprs::CsMat;
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 /// Methods for computing the inverse document frequency of a vocabulary entry
 pub enum TfIdfMethod {
     /// Computes the idf as `log(1+n/1+document_frequency) + 1`. The "plus ones" inside the log
@@ -32,12 +32,13 @@ impl TfIdfMethod {
     }
 }
 
-/// Simlar to [`CountVectorizer`](studct.CountVectorizer.html) but instead of
+/// Simlar to [`CountVectorizer`](CountVectorizer) but instead of
 /// just counting the term frequency of each vocabulary entry in each given document,
 /// it computes the term frequecy times the inverse document frequency, thus giving more importance
 /// to entries that appear many times but only on some documents. The weight function can be adjusted
-/// by setting the appropriate [method](enum.TfIdfMethod.html). This struct provides the same string  
-/// processing customizations described in [`CountVectorizer`](studct.CountVectorizer.html).
+/// by setting the appropriate [method](TfIdfMethod). This struct provides the same string  
+/// processing customizations described in [`CountVectorizer`](CountVectorizer).
+#[derive(Clone, Debug)]
 pub struct TfIdfVectorizer {
     count_vectorizer: CountVectorizerParams,
     method: TfIdfMethod,
@@ -92,7 +93,7 @@ impl TfIdfVectorizer {
     }
 
     /// Specifies the minimum and maximum (relative) document frequencies that each vocabulary entry must satisfy.
-    /// `min_freq` and `max_freq` must lie in [0;1] and `min_freq` should not be greater than `max_freq`
+    /// `min_freq` and `max_freq` must lie in `0..=1` and `min_freq` should not be greater than `max_freq`
     pub fn document_frequency(self, min_freq: f32, max_freq: f32) -> Self {
         Self {
             count_vectorizer: self.count_vectorizer.document_frequency(min_freq, max_freq),
@@ -109,7 +110,7 @@ impl TfIdfVectorizer {
     }
 
     /// Learns a vocabulary from the texts in `x`, according to the specified attributes and maps each
-    /// vocabulary entry to an integer value, producing a [FittedTfIdfVectorizer](struct.FittedTfIdfVectorizer.html).
+    /// vocabulary entry to an integer value, producing a [FittedTfIdfVectorizer](FittedTfIdfVectorizer).
     ///
     /// Returns an error if:
     /// * one of the `n_gram` boundaries is set to zero or the minimum value is greater than the maximum value
@@ -126,8 +127,8 @@ impl TfIdfVectorizer {
         })
     }
 
-    /// Produces a [FittedTfIdfVectorizer](struct.FittedTfIdfVectorizer.html) with the input vocabulary.
-    /// All struct attributes are ignored in the fitting but will be used by the [FittedTfIdfVectorizer](struct.FittedTfIdfVectorizer.html)
+    /// Produces a [FittedTfIdfVectorizer](FittedTfIdfVectorizer) with the input vocabulary.
+    /// All struct attributes are ignored in the fitting but will be used by the [FittedTfIdfVectorizer](FittedTfIdfVectorizer)
     /// to transform any text to be examined. As such this will return an error in the same cases as the `fit` method.
     pub fn fit_vocabulary<T: ToString>(&self, words: &[T]) -> Result<FittedTfIdfVectorizer> {
         let fitted_vectorizer = self.count_vectorizer.fit_vocabulary(words)?;
@@ -152,8 +153,9 @@ impl TfIdfVectorizer {
 }
 
 /// Counts the occurrences of each vocabulary entry, learned during fitting, in a sequence of texts and scales them by the inverse document
-/// document frequency defined by the [method](enum.TfIdfMethod.html). Each vocabulary entry is mapped
+/// document frequency defined by the [method](TfIdfMethod). Each vocabulary entry is mapped
 /// to an integer value that is used to index the count in the result.
+#[derive(Clone, Debug)]
 pub struct FittedTfIdfVectorizer {
     fitted_vectorizer: CountVectorizer,
     method: TfIdfMethod,
@@ -225,6 +227,12 @@ mod tests {
                 assert_abs_diff_eq!(column_for_word!($voc, $transf, $word), $counts, epsilon=1e-3);
             )*
         }
+    }
+
+    #[test]
+    fn autotraits() {
+        fn has_autotraits<T: Send + Sync + Sized + Unpin>() {}
+        has_autotraits::<TfIdfMethod>();
     }
 
     #[test]

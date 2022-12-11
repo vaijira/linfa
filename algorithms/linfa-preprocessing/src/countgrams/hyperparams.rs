@@ -5,14 +5,14 @@ use std::cell::{Ref, RefCell};
 use std::collections::HashSet;
 
 /// Count vectorizer: learns a vocabulary from a sequence of documents (or file paths) and maps each
-/// vocabulary entry to an integer value, producing a [FittedCountVectorizer](struct.FittedCountVectorizer.html) that can
+/// vocabulary entry to an integer value, producing a [CountVectorizer](crate::CountVectorizer) that can
 /// be used to count the occurrences of each vocabulary entry in any sequence of documents. Alternatively a user-specified vocabulary can
 /// be used for fitting.
 ///
 /// ### Attributes
 ///
 /// If a user-defined vocabulary is used for fitting then the following attributes will not be considered during the fitting phase but
-/// they will still be used by the [FittedCountVectorizer](struct.FittedCountVectorizer.html) to transform any text to be examined.
+/// they will still be used by the [CountVectorizer](crate::CountVectorizer) to transform any text to be examined.
 ///
 /// * `split_regex`: the regex espression used to split decuments into tokens. Defaults to r"\\b\\w\\w+\\b", which selects "words", using whitespaces and
 /// punctuation symbols as separators.
@@ -107,7 +107,7 @@ impl CountVectorizerParams {
     }
 
     /// Specifies the minimum and maximum (relative) document frequencies that each vocabulary entry must satisfy.
-    /// `min_freq` and `max_freq` must lie in [0;1] and `min_freq` should not be greater than `max_freq`
+    /// `min_freq` and `max_freq` must lie in `0..=1` and `min_freq` should not be greater than `max_freq`
     pub fn document_frequency(mut self, min_freq: f32, max_freq: f32) -> Self {
         self.0.document_frequency = (min_freq, max_freq);
         self
